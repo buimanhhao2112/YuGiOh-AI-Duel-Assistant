@@ -25,3 +25,6 @@ body{font-size:16px;background:radial-gradient(ellipse at 78% -15%,#252a18 0,tra
 .button{font-size:12px}
 .field-label,.output-label{font-size:10px}
 @media(max-width:950px){.route-step-title{font-size:15px}}
+
+/* Keep the combo result full-width inside its 7-column panel. */
+.route-output-grid{display:block;width:100%;min-width:0;grid-template-columns:minmax(0,1fr)}.route-output-grid>.route-result{display:block;width:100%;max-width:none;min-width:0}.route-step-head{min-width:0}.route-step-title{min-width:0;overflow-wrap:anywhere}@media(max-width:1250px){.route-step-head{flex-wrap:wrap}.route-step-controls{width:100%;justify-content:flex-end}}
