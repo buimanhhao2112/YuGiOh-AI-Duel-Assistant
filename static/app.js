@@ -417,7 +417,13 @@
       item.append(head, rationale);
       list.append(item);
     });
-    resultBox.append(list);
+    const stepsCard = document.createElement("section");
+    stepsCard.className = "route-steps-card";
+    const stepsHeading = document.createElement("h3");
+    stepsHeading.className = "route-steps-heading";
+    stepsHeading.textContent = "CÁC BƯỚC COMBO";
+    stepsCard.append(stepsHeading, list);
+    resultBox.append(stepsCard);
   }
 
   function openSwapModal(step) {
