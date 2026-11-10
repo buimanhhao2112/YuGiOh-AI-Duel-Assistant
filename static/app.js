@@ -311,6 +311,9 @@
 
   function renderRouteResult(resultBox, result, { human = false } = {}) {
     resultBox.replaceChildren();
+    const breakdownBox = !human && resultBox.id === "ai-route-result" ? $("#ai-route-breakdown") : resultBox;
+    if (breakdownBox !== resultBox) breakdownBox.replaceChildren();
+    breakdownBox.classList.remove("hidden");
     resultBox.classList.remove("hidden", "error");
     if (!human) {
       state.currentRoute = {
@@ -332,13 +335,13 @@
     const breakdownHeading = document.createElement("h3");
     breakdownHeading.className = "route-disruption-heading";
     breakdownHeading.textContent = "🛡️ END-BOARD DISRUPTION BREAKDOWN";
-    resultBox.append(breakdownHeading);
+    breakdownBox.append(breakdownHeading);
     const breakdown = result.end_board_disruptions || [];
     if (!breakdown.length) {
       const emptyBreakdown = document.createElement("div");
       emptyBreakdown.className = "route-result-empty";
       emptyBreakdown.textContent = "Chưa có tương tác được card model đánh dấu trên End-Board hoặc tay bài.";
-      resultBox.append(emptyBreakdown);
+      // No stale placeholder: an empty panel communicates that no classified interaction exists.
     } else {
       const table = document.createElement("table");
       table.className = "route-disruption-table";
@@ -362,7 +365,7 @@
         body.append(row);
       });
       table.append(head, body);
-      resultBox.append(table);
+      breakdownBox.append(table);
     }
 
     if (!steps.length) {
@@ -384,18 +387,17 @@
       title.className = "route-step-title";
       title.textContent = `Bước ${step.step_num || index + 1}: ${step.action || ""}`;
       head.append(title);
+      const controls = document.createElement("div");
+      controls.className = "route-step-controls";
       if (step.role) {
         const role = document.createElement("span");
         role.className = "route-step-role";
         role.textContent = step.role;
         head.append(role);
       }
-      item.append(head);
       const rationale = document.createElement("p");
       rationale.className = "route-step-rationale hidden";
       rationale.textContent = step.rationale || "Chưa có lời giải thích cho bước này.";
-      const controls = document.createElement("div");
-      controls.className = "route-step-controls";
       const whyButton = document.createElement("button");
       whyButton.type = "button";
       whyButton.textContent = "ⓘ Vì sao dùng lá này?";
@@ -411,7 +413,8 @@
         swapButton.addEventListener("click", () => openSwapModal(step));
         controls.append(swapButton);
       }
-      item.append(controls, rationale);
+      head.append(controls);
+      item.append(head, rationale);
       list.append(item);
     });
     resultBox.append(list);

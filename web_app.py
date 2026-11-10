@@ -490,6 +490,10 @@ def _endboard_disruption_breakdown(state: Any, deck: DeckModel) -> list[dict[str
             ):
                 continue
             counts[(unit.name, "Sân", "Tương tác", "Hiệu ứng tương tác được khai báo trong card model.")] += spec.interruptions
+    for spell in state.spell_trap_zone:
+        profile = disruption_profile(spell.name)
+        if profile:
+            counts[(spell.name, "Spell/Trap", str(profile["type"]), str(profile["effect"]))] += int(profile.get("count", 1))
     for name in state.hand:
         profile = disruption_profile(name)
         if profile and profile.get("zone") == "hand":

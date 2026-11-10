@@ -1680,6 +1680,7 @@ def _rollout_action(
         "xyz_summon": 1.2,
         "nash_rank_up": 2.0,
         "k9_forced_release": 2.0,
+        "k9_xyz_summon": 5.0,
     }
     weights: list[float] = []
     for action in actions:
@@ -1688,6 +1689,11 @@ def _rollout_action(
             weight *= 4.0 if action.card == "Snake-Eye Ash" else 3.5 if action.card in {
                 "Vanquish Soul Razen", "Vanquish Soul Dr. Mad Love", "K9-04 Noroi", "K9-17 Izuna"
             } else 0.5
+        # Prefer establishing the K9 negate before the fifth Special Summon.
+        if action.kind in {"xyz_summon", "nash_rank_up"} and action.card == 'K9-17 "Ripper"':
+            weight = max(weight, 24.0)
+        if action.kind in {"xyz_summon", "nash_rank_up"} and action.card == "Divine Arsenal AA-ZEUS - Sky Thunder":
+            weight = max(weight, 12.0)
         if cards and action.kind == "snake_eye_search" and "poplar_ss_if_added" in cards[action.target].operators:
             weight *= 4.0
         if cards and action.kind == "poplar_search" and "oss_activate" in cards[action.target].operators:

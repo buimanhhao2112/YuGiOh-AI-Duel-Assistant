@@ -122,7 +122,10 @@
             <label>MODE<select id="ai-route-mode"><option value="going_1st">🛡️ Going 1st</option><option value="going_2nd">⚔️ Going 2nd</option></select></label>
             <button class="button button-primary generate-route-button" id="generate-ai-route">⚡ GENERATE AI ROUTE</button>
           </div>
-          <div id="ai-route-result" class="result-box route-result hidden" aria-live="polite"></div>
+          <div class="route-output-grid">
+            <div id="ai-route-result" class="result-box route-result hidden" aria-live="polite"></div>
+            <aside id="ai-route-breakdown" class="route-breakdown-panel hidden" aria-live="polite"></aside>
+          </div>
         </article>
 
         <article class="panel vision-panel">

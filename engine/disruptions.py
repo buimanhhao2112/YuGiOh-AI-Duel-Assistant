@@ -44,6 +44,18 @@ DISRUPTION_CARDS: dict[str, dict[str, Any]] = {
         "zone": "field", "type": "Monster-effect negate", "count": 1,
         "effect": "Detach a material to negate a monster effect activated in hand or GY.",
     },
+    "n.as.h. knight": {
+        "zone": "field", "type": "Negate & Hand Rip", "count": 1,
+        "effect": "Negate 1 opponent monster effect, send 1 random card from their hand to the GY, and halve their LP.",
+    },
+    "number c104: umbral horror masquerade": {
+        "zone": "field", "type": "Negate & Hand Rip", "count": 1,
+        "effect": "Negate 1 opponent monster, send 1 random card from their hand to the GY, and halve their LP.",
+    },
+    "k9-x forced release": {
+        "zone": "set_trap", "type": "Removal & Summon", "count": 1,
+        "effect": "Pop 1 card on the field, then summon K9-X Werewolf to enable another hand/GY interaction.",
+    },
     'k9-66x "jacks"': {
         "zone": "field", "type": "Destroy", "count": 1,
         "activation_key": "destroy",
@@ -58,9 +70,9 @@ DISRUPTION_CARDS: dict[str, dict[str, Any]] = {
         "effect": "Quick-effect summon or recover a Vanquish Soul monster.",
     },
     "s:p little knight": {
-        "zone": "field", "type": "Temporary banish", "count": 1,
+        "zone": "field", "type": "Banish Removal", "count": 1,
         "activation_key": "banish_both",
-        "effect": "Quick-effect banish two face-up monsters until the End Phase.",
+        "effect": "Quick-effect banish 1 card your opponent controls until the End Phase.",
     },
     "super starslayer ty-phon - sky crisis": {
         "zone": "field", "type": "Bounce / summon suppression", "count": 1,
