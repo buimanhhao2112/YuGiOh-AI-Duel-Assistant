@@ -1,0 +1,325 @@
+{
+  "format": "Master Duel",
+  "source": "https://www.masterduelmeta.com/api/v1/banlist-changes",
+  "fetched_at": "2026-11-09T13:14:17+00:00",
+  "cards": [
+    {
+      "card_id": "60c2b3a9a0e24f2d54a51382",
+      "name": "Abyss Dweller",
+      "ban_status": "Forbidden",
+      "effective_date": "2025-08-04T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3a9a0e24f2d54a5143a",
+      "name": "Amano-Iwato",
+      "ban_status": "Limited",
+      "effective_date": "2023-02-28T07:30:00.000Z"
+    },
+    {
+      "card_id": "680235043f429559d4b6aa2f",
+      "name": "Ame no Habakiri no Mitsurugi",
+      "ban_status": "Semi-Limited",
+      "effective_date": "2026-03-01T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3a9a0e24f2d54a514eb",
+      "name": "Apollousa, Bow of the Goddess",
+      "ban_status": "Forbidden",
+      "effective_date": "2025-11-07T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3a9a0e24f2d54a51545",
+      "name": "Archlord Kristya",
+      "ban_status": "Forbidden",
+      "effective_date": "2025-12-05T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3a9a0e24f2d54a51649",
+      "name": "Barrier Statue of the Stormwinds",
+      "ban_status": "Forbidden",
+      "effective_date": "2022-12-01T01:00:00.000Z"
+    },
+    {
+      "card_id": "60c2b3a9a0e24f2d54a516a3",
+      "name": "Beatrice, Lady of the Eternal",
+      "ban_status": "Forbidden",
+      "effective_date": "2025-04-10T08:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3a9a0e24f2d54a51741",
+      "name": "Blackwing - Steam the Cloak",
+      "ban_status": "Limited",
+      "effective_date": "2023-05-10T07:00:00.000Z"
+    },
+    {
+      "card_id": "647f2252ff6b2198dd064243",
+      "name": "Bonfire",
+      "ban_status": "Limited",
+      "effective_date": "2025-06-01T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aaa0e24f2d54a51ad2",
+      "name": "Branded Opening",
+      "ban_status": "Semi-Limited",
+      "effective_date": "2024-10-31T07:30:00.000Z"
+    },
+    {
+      "card_id": "62ddd693d4d4b99dbbc9568e",
+      "name": "Bystial Saronir",
+      "ban_status": "Limited",
+      "effective_date": "2024-02-07T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aaa0e24f2d54a51899",
+      "name": "Called by the Grave",
+      "ban_status": "Forbidden",
+      "effective_date": "2026-09-03T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aaa0e24f2d54a51922",
+      "name": "Chaos Ruler, the Chaotic Magical Dragon",
+      "ban_status": "Forbidden",
+      "effective_date": "2024-01-10T07:30:00.000Z"
+    },
+    {
+      "card_id": "67ac26a5c13612d02b94d176",
+      "name": "Cupsy☆Yummy",
+      "ban_status": "Limited",
+      "effective_date": "2026-04-01T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aaa0e24f2d54a51ad3",
+      "name": "Cyber Angel Benten",
+      "ban_status": "Limited",
+      "effective_date": "2022-05-09T04:00:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aaa0e24f2d54a51d1c",
+      "name": "Destiny HERO - Celestial",
+      "ban_status": "Forbidden",
+      "effective_date": "2022-08-31T05:22:00.000Z"
+    },
+    {
+      "card_id": "6126b426f9d784006595dd2d",
+      "name": "Floowandereeze & Empen",
+      "ban_status": "Limited",
+      "effective_date": "2023-06-30T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a5259c",
+      "name": "Harpie's Feather Storm",
+      "ban_status": "Forbidden",
+      "effective_date": "2026-08-05T06:00:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a525c4",
+      "name": "Heavy Storm",
+      "ban_status": "Limited",
+      "effective_date": "2024-07-29T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a52666",
+      "name": "Hot Red Dragon Archfiend King Calamity",
+      "ban_status": "Forbidden",
+      "effective_date": "2024-06-06T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a526ae",
+      "name": "Ido the Supreme Magical Force",
+      "ban_status": "Forbidden",
+      "effective_date": "2024-08-07T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a52751",
+      "name": "Instant Fusion",
+      "ban_status": "Forbidden",
+      "effective_date": "2023-05-01T01:00:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a5281f",
+      "name": "Kaiser Colosseum",
+      "ban_status": "Forbidden",
+      "effective_date": "2024-07-10T07:30:00.000Z"
+    },
+    {
+      "card_id": "62de2101e9066c4257aa9597",
+      "name": "Kashtira Fenrir",
+      "ban_status": "Semi-Limited",
+      "effective_date": "2023-08-07T05:27:00.000Z"
+    },
+    {
+      "card_id": "696b88b8fe4fb91ad3c5d9a5",
+      "name": "Kewl Tune Rotary",
+      "ban_status": "Limited",
+      "effective_date": "2026-06-30T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a52a2d",
+      "name": "M-X-Saber Invoker",
+      "ban_status": "Limited",
+      "effective_date": "2023-09-01T01:00:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a52db9",
+      "name": "Naturia Rosewhip",
+      "ban_status": "Forbidden",
+      "effective_date": "2026-05-07T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a52eaa",
+      "name": "Number 41: Bagooska the Terribly Tired Tapir",
+      "ban_status": "Forbidden",
+      "effective_date": "2025-10-08T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a52edc",
+      "name": "Number 86: Heroic Champion - Rhongomyniad",
+      "ban_status": "Forbidden",
+      "effective_date": "2023-08-31T08:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a52f22",
+      "name": "Obedience Schooled",
+      "ban_status": "Forbidden",
+      "effective_date": "2026-01-08T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aca0e24f2d54a5314f",
+      "name": "Pot of Extravagance",
+      "ban_status": "Limited",
+      "effective_date": "2023-11-09T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aca0e24f2d54a53152",
+      "name": "Pot of Prosperity",
+      "ban_status": "Forbidden",
+      "effective_date": "2024-12-06T07:30:00.000Z"
+    },
+    {
+      "card_id": "6265e69f3ecc89b0e4f3022c",
+      "name": "Primeval Planet Perlereino",
+      "ban_status": "Forbidden",
+      "effective_date": "2024-10-09T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aba0e24f2d54a52fde",
+      "name": "PSY-Framelord Omega",
+      "ban_status": "Forbidden",
+      "effective_date": "2026-10-06T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aca0e24f2d54a53334",
+      "name": "Redox, Dragon Ruler of Boulders",
+      "ban_status": "Limited",
+      "effective_date": "2023-12-05T08:30:00.000Z"
+    },
+    {
+      "card_id": "6239281592d4b8933d96d7e5",
+      "name": "Runick Fountain",
+      "ban_status": "Limited",
+      "effective_date": "2023-12-05T07:30:00.000Z"
+    },
+    {
+      "card_id": "66b3680e4c13ef0a2809a8c1",
+      "name": "Ryzeal Cross",
+      "ban_status": "Forbidden",
+      "effective_date": "2026-02-05T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aca0e24f2d54a53532",
+      "name": "Secret Village of the Spellcasters",
+      "ban_status": "Forbidden",
+      "effective_date": "2025-02-06T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aca0e24f2d54a535f9",
+      "name": "Sillva, Warlord of Dark World",
+      "ban_status": "Forbidden",
+      "effective_date": "2023-07-13T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aca0e24f2d54a53620",
+      "name": "Skill Drain",
+      "ban_status": "Limited",
+      "effective_date": "2023-04-10T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aca0e24f2d54a53646",
+      "name": "Sky Striker Ace - Kagari",
+      "ban_status": "Semi-Limited",
+      "effective_date": null
+    },
+    {
+      "card_id": "64a650a26cee34962d2183b7",
+      "name": "Snake-Eye Oak",
+      "ban_status": "Forbidden",
+      "effective_date": "2025-07-04T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aca0e24f2d54a53691",
+      "name": "Solemn Judgment",
+      "ban_status": "Semi-Limited",
+      "effective_date": "2025-05-09T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aca0e24f2d54a53709",
+      "name": "Spell Canceller",
+      "ban_status": "Forbidden",
+      "effective_date": "2026-11-05T08:30:00.000Z"
+    },
+    {
+      "card_id": "6265e6b63ecc89b0e4f30332",
+      "name": "Spright Starter",
+      "ban_status": "Semi-Limited",
+      "effective_date": "2023-02-14T03:55:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aca0e24f2d54a538af",
+      "name": "Superheavy Samurai Soulpiercer",
+      "ban_status": "Limited",
+      "effective_date": "2024-04-30T07:30:00.000Z"
+    },
+    {
+      "card_id": "6126b426f9d784006595dd49",
+      "name": "Swordsoul Strategist Longyuan",
+      "ban_status": "Semi-Limited",
+      "effective_date": "2022-10-28T07:30:00.000Z"
+    },
+    {
+      "card_id": "65783c60946691dd4ef96fc2",
+      "name": "Tenpai Dragon Chundra",
+      "ban_status": "Limited",
+      "effective_date": "2025-01-09T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3aca0e24f2d54a53999",
+      "name": "Terraforming",
+      "ban_status": "Forbidden",
+      "effective_date": "2023-06-08T07:30:00.000Z"
+    },
+    {
+      "card_id": "6265e6d53ecc89b0e4f3052f",
+      "name": "Water Enchantress of the Temple",
+      "ban_status": "Semi-Limited",
+      "effective_date": null
+    },
+    {
+      "card_id": "60c2b3ada0e24f2d54a53de6",
+      "name": "White Dragon Wyverburster",
+      "ban_status": "Limited",
+      "effective_date": "2024-09-12T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3ada0e24f2d54a53e13",
+      "name": "Wind-Up Carrier Zenmaity",
+      "ban_status": "Semi-Limited",
+      "effective_date": "2022-09-30T07:30:00.000Z"
+    },
+    {
+      "card_id": "60c2b3ada0e24f2d54a53f9c",
+      "name": "Zoodiac Broadbull",
+      "ban_status": "Limited",
+      "effective_date": "2026-06-04T07:30:00.000Z"
+    }
+  ]
+}

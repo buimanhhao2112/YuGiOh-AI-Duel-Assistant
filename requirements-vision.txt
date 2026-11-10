@@ -1,0 +1,4 @@
+-r requirements-web.txt
+mss>=10.0,<11.0
+opencv-python-headless>=4.10,<5.0
+pytesseract>=0.3.13,<1.0

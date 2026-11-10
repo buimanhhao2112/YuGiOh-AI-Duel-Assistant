@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.py[cod]
+data/combo_cache.db-shm
+data/combo_cache.db-wal
+data/card_thumbnails/*
+!data/card_thumbnails/README.md

@@ -1,0 +1,24 @@
+[
+  {
+    "name": "Ash Blossom & Joyous Spring",
+    "type": "Monster",
+    "frame_type": "Effect",
+    "attribute": "FIRE",
+    "race_type": "Zombie",
+    "level_rank_link": 3,
+    "atk": 0,
+    "def": 1800,
+    "description": "When a card or effect is activated that includes any of these effects (Quick Effect): You can discard this card; negate that effect.\n● Add a card from the Deck to the hand.\n● Special Summon from the Deck.\n● Send a card from the Deck to the GY.\nYou can only use this effect of \"Ash Blossom & Joyous Spring\" once per turn."
+  },
+  {
+    "name": "Snake-Eye Ash",
+    "type": "Monster",
+    "frame_type": "Effect",
+    "attribute": "FIRE",
+    "race_type": "Pyro",
+    "level_rank_link": 1,
+    "atk": 800,
+    "def": 1000,
+    "description": "If this card is Normal or Special Summoned: You can add 1 Level 1 FIRE monster from your Deck to your hand.\nYou can send 2 face-up cards you control to the GY, including this card; Special Summon 1 \"Snake-Eye\" monster from your hand or Deck, except \"Snake-Eye Ash\".\nYou can only use each effect of \"Snake-Eye Ash\" once per turn."
+  }
+]

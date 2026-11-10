@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#09090b">
+  <title>Yu-Gi-Oh! AI Duel Assistant</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/fuse.js@7.5.0/dist/fuse.min.js"></script>
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Yu-Gi-Oh AI home">
+        <span class="brand-mark">Y</span>
+        <span><strong>DUEL ASSISTANT</strong><small>LOCAL DECK LAB</small></span>
+      </a>
+      <div class="topbar-status">
+        <span class="live-dot"></span><span>LOCAL ENGINE</span>
+        <span class="divider"></span>
+        <span id="catalog-count">{{ card_count }} cards</span>
+        <span class="tag">NO GAME INPUT</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-heading">
+        <div>
+          <p class="eyebrow">DECK BUILDER / ROUTE LAB / VISION</p>
+          <h1>Master Duel <span>Workbench</span></h1>
+      <p class="subheading">Tìm thẻ trong catalog local, dựng deck, tự tìm combo và benchmark route trên máy.</p>
+        </div>
+        <div class="heading-meta"><span class="status-pill" id="app-status">Đang kết nối…</span></div>
+      </section>
+
+      {% if catalog_error %}
+      <div class="notice error">Không đọc được card catalog: {{ catalog_error }}</div>
+      {% endif %}
+
+      <section class="workspace-grid">
+        <article class="panel search-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">CARD DATABASE</p><h2>Instant Search</h2></div>
+            <span class="count-badge" id="visible-count">Đang tải</span>
+          </div>
+          <div class="search-box">
+            <span class="search-icon">⌕</span>
+            <input id="card-search" type="search" autocomplete="off" placeholder="Tìm tên thẻ hoặc archetype…" aria-label="Tìm thẻ">
+            <kbd>/</kbd>
+          </div>
+          <div class="filter-row">
+            <label>TYPE<select id="type-filter"><option value="">All Types</option><option>Monster</option><option>Spell</option><option>Trap</option></select></label>
+            <label>ATTRIBUTE<select id="attribute-filter"><option value="">All Attributes</option><option>LIGHT</option><option>DARK</option><option>WATER</option><option>FIRE</option><option>EARTH</option><option>WIND</option><option>DIVINE</option></select></label>
+            <span class="search-time" id="search-time">0.0 ms</span>
+          </div>
+          <div class="results-label"><span>KẾT QUẢ</span><span>Click hoặc kéo thẻ vào deck</span></div>
+          <div id="card-results" class="card-results" role="listbox" aria-label="Kết quả tìm thẻ">
+            <div class="empty-state">Đang tải dữ liệu thẻ…</div>
+          </div>
+          <div class="panel-foot"><span id="search-engine">Fuse.js fuzzy search</span><span>Catalog được nạp một lần vào RAM</span></div>
+        </article>
+
+        <article class="panel deck-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">LOCAL DECKS</p><h2>Deck Builder</h2></div>
+            <button class="icon-button" id="clear-deck" title="Xóa deck đang sửa">⌫</button>
+          </div>
+          <div class="deck-toolbar">
+            <select id="deck-select" aria-label="Deck có sẵn"></select>
+            <button class="button button-muted" id="load-deck">Mở deck</button>
+          </div>
+          <div class="deck-name-row">
+            <input id="deck-name" value="Vanquish Soul x K9" maxlength="80" aria-label="Tên deck">
+            <button class="button button-primary" id="save-deck">Lưu JSON</button>
+          </div>
+          <div class="deck-summary">
+            <span><b id="main-count">0</b><small>/60 MAIN</small></span>
+            <span class="summary-separator"></span>
+            <span><b id="extra-count">0</b><small>/15 EXTRA</small></span>
+            <span class="deck-rule">Giới hạn bản sao theo banlist khi lưu</span>
+          </div>
+          <div class="deck-tabs" role="tablist">
+            <button class="deck-tab active" data-zone="main">MAIN DECK <span id="main-tab-count">0</span></button>
+            <button class="deck-tab" data-zone="extra">EXTRA DECK <span id="extra-tab-count">0</span></button>
+          </div>
+          <div id="main-drop" class="deck-list drop-zone active" data-zone="main"><div class="empty-state">Thả thẻ vào đây hoặc nhấn + trong kết quả tìm kiếm.</div></div>
+          <div id="extra-drop" class="deck-list drop-zone" data-zone="extra"><div class="empty-state">Extra Deck — tối đa 15 lá.</div></div>
+          <div class="panel-foot"><span>Deck được lưu trong <code>examples/</code></span><span id="deck-message"></span></div>
+        </article>
+      </section>
+
+      <section class="lower-grid">
+        <article class="panel route-panel ai-route-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">PRIMARY / MCTS AUTO SOLVER</p><h2>AI Route Generator</h2></div>
+            <span class="tag">AUTO SEARCH</span>
+          </div>
+          <p class="panel-description">Chọn 5 lá đầu tay từ các tên độc bản trong Main Deck đang chọn. AI chạy 15.000 lượt MCTS để tìm chuỗi nước đi.</p>
+          <div class="hand-slots" id="ai-hand-slots" aria-label="Chọn 5 lá bài đầu tay">
+            <label class="hand-slot"><span>SLOT 1</span><select class="text-input hand-card-select" id="hand-slot-1"><option value="">Chọn lá bài…</option></select></label>
+            <label class="hand-slot"><span>SLOT 2</span><select class="text-input hand-card-select" id="hand-slot-2"><option value="">Chọn lá bài…</option></select></label>
+            <label class="hand-slot"><span>SLOT 3</span><select class="text-input hand-card-select" id="hand-slot-3"><option value="">Chọn lá bài…</option></select></label>
+            <label class="hand-slot"><span>SLOT 4</span><select class="text-input hand-card-select" id="hand-slot-4"><option value="">Chọn lá bài…</option></select></label>
+            <label class="hand-slot"><span>SLOT 5</span><select class="text-input hand-card-select" id="hand-slot-5"><option value="">Chọn lá bài…</option></select></label>
+          </div>
+          <div class="route-actions">
+            <label>MODE<select id="ai-route-mode"><option value="going_1st">🛡️ Going 1st</option><option value="going_2nd">⚔️ Going 2nd</option></select></label>
+            <button class="button button-primary generate-route-button" id="generate-ai-route">⚡ GENERATE AI ROUTE</button>
+          </div>
+          <div id="ai-route-result" class="result-box route-result hidden" aria-live="polite"></div>
+        </article>
+
+        <article class="panel vision-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">PIXEL-ONLY / OPT-IN</p><h2>Vision Monitor</h2></div>
+            <span class="status-pill" id="vision-state">Đang kiểm tra</span>
+          </div>
+          <p class="panel-description">Chụp pixel màn hình; không đọc RAM và không gửi input vào game. Bật quét khi bạn chủ động chọn.</p>
+          <div class="vision-controls">
+            <button class="button button-muted" id="scan-once">Chụp một lần</button>
+            <button class="button button-primary" id="toggle-vision">Bắt đầu quét 0,5s</button>
+          </div>
+          <div class="vision-meta" id="vision-capabilities">Đọc trạng thái camera…</div>
+          <div class="vision-output">
+            <div><span class="output-label">HAND DETECTED</span><div id="vision-hand" class="detected-hand">Chưa có kết quả.</div></div>
+            <div><span class="output-label">COMBAT LOG / ARCHETYPE</span><pre id="vision-log">—</pre></div>
+          </div>
+          <button class="text-button" id="use-detected-hand" disabled>Dùng tay bài nhận diện trong AI Route Generator</button>
+          <p class="vision-footnote">Nhận diện thẻ cần template ảnh trong <code>data/card_thumbnails/</code>; OCR cần Tesseract.</p>
+        </article>
+      </section>
+
+      <section class="panel human-benchmark-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">SECONDARY / PRO PLAYER LINE</p><h2>Human Route Benchmark</h2></div>
+          <span class="tag">MCTS BASELINE</span>
+        </div>
+        <p class="panel-description">Nạp một chuỗi combo thủ công để kiểm tra operator, chấm điểm và lưu Gold Route nếu đạt điểm MCTS.</p>
+        <div class="human-route-grid">
+          <div>
+            <label class="field-label" for="human-route-hand">STARTING HAND <span>Ngăn cách bằng |</span></label>
+            <input class="text-input" id="human-route-hand" placeholder='K9-04 Noroi | K9-17 Izuna | …'>
+            <div class="route-actions human-route-actions">
+              <label>MODE<select id="human-route-mode"><option value="going_1st">🛡️ Going 1st</option><option value="going_2nd">⚔️ Going 2nd</option></select></label>
+              <button class="button button-primary" id="benchmark-route">Benchmark Route <span>↗</span></button>
+            </div>
+          </div>
+          <div>
+            <label class="field-label" for="human-route-steps">ROUTE STEPS <span>Mỗi bước một dòng</span></label>
+            <textarea class="text-input route-textarea" id="human-route-steps" rows="5" placeholder="Normal Summon [K9-04 Noroi]&#10;Activate [K9-04 Noroi] on summon; Special Summon [K9-17 Izuna] from Deck&#10;Xyz Summon [K9-17 &quot;Ripper&quot;] using [K9-04 Noroi, K9-17 Izuna]"></textarea>
+          </div>
+        </div>
+        <div id="human-route-result" class="result-box route-result hidden" aria-live="polite"></div>
+      </section>
+      <footer class="page-footer"><span>Yu-Gi-Oh! AI Duel Assistant</span><span>Local prototype · No auto-play · Validate routes with OCG Core</span></footer>
+    </main>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+</body>
+</html>
