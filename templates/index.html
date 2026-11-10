@@ -11,7 +11,7 @@
   <script defer src="/static/app.js?v={{ asset_version }}"></script>
 </head>
 <body>
-  <div class="app-shell">
+  <div class="app-shell w-full px-8 py-6 max-w-none">
     <header class="topbar">
       <a class="brand" href="/" aria-label="Yu-Gi-Oh AI home">
         <span class="brand-mark">Y</span>
@@ -97,8 +97,8 @@
         </article>
       </section>
 
-      <section class="lower-grid">
-        <article class="panel route-panel ai-route-panel">
+      <section class="lower-grid route-grid-12 grid grid-cols-12 gap-6 w-full">
+        <article class="panel route-panel ai-route-panel col-span-7">
           <div class="panel-heading">
             <div><p class="eyebrow">PRIMARY / MCTS AUTO SOLVER</p><h2>AI Route Generator</h2></div>
             <span class="tag">AUTO SEARCH</span>
@@ -124,11 +124,12 @@
           </div>
           <div class="route-output-grid">
             <div id="ai-route-result" class="result-box route-result hidden" aria-live="polite"></div>
-            <aside id="ai-route-breakdown" class="route-breakdown-panel hidden" aria-live="polite"></aside>
           </div>
         </article>
 
-        <article class="panel vision-panel">
+        <aside id="ai-route-breakdown" class="route-breakdown-panel sticky top-6 self-start hidden" aria-live="polite"></aside>
+
+        <article class="panel vision-panel col-span-7">
           <div class="panel-heading">
             <div><p class="eyebrow">PIXEL-ONLY / OPT-IN</p><h2>Vision Monitor</h2></div>
             <span class="status-pill" id="vision-state">Đang kiểm tra</span>
