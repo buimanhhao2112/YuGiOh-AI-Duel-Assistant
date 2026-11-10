@@ -15,6 +15,7 @@ from itertools import combinations, product
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
+from engine.disruptions import disruption_profile
 from mdm_banlist import MAX_COPIES, normalize_status
 
 
@@ -82,7 +83,9 @@ class SimState:
     resources_used: int = 0
     opponent_hand_count: int = 5
     opponent_hand_effect_activated: bool = False
+    opponent_field_count: int = 0
     modeled_disruptions: int = 0
+    modeled_board_breaks: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +259,7 @@ def make_initial_state(
     *,
     opponent_hand_count: int = 5,
     opponent_hand_effect_activated: bool = False,
+    opponent_field_count: int = 0,
 ) -> SimState:
     hand = list(starting_hand)
     main = list(deck.main_deck)
@@ -273,6 +277,7 @@ def make_initial_state(
         extra_deck=deck.extra_deck,
         opponent_hand_count=opponent_hand_count,
         opponent_hand_effect_activated=opponent_hand_effect_activated,
+        opponent_field_count=opponent_field_count,
     )
 
 
@@ -324,7 +329,9 @@ def _new_summon(state: SimState, name: str, *, normal: bool, from_deck: bool) ->
         resources_used=state.resources_used + int(from_deck),
         opponent_hand_count=state.opponent_hand_count,
         opponent_hand_effect_activated=state.opponent_hand_effect_activated,
+        opponent_field_count=state.opponent_field_count,
         modeled_disruptions=state.modeled_disruptions,
+        modeled_board_breaks=state.modeled_board_breaks,
     )
 
 
@@ -431,6 +438,19 @@ def _hand_cards_with_attribute(
 def legal_actions(state: SimState, cards: dict[str, CardSpec]) -> list[Action]:
     """Enumerate modeled legal actions from the current abstract state."""
     actions: list[Action] = []
+
+    if state.opponent_field_count > 0:
+        for name in state.hand:
+            profile = disruption_profile(name)
+            if profile and profile.get("action") == "kaiju_tribute":
+                actions.append(
+                    _action(
+                        "kaiju_tribute",
+                        name,
+                        target="opponent monster",
+                        description=f"Special Summon [{name}] to the opponent's field by Tributing 1 opponent monster",
+                    )
+                )
 
     if len(state.field) < 5 and not state.normal_summon_used:
         for name in state.hand:
@@ -998,6 +1018,21 @@ def legal_actions(state: SimState, cards: dict[str, CardSpec]) -> list[Action]:
                         description=f"Xyz Summon [{extra_name}] using [{', '.join(material_names)}]",
                     )
                 )
+        if (
+            extra_name == "Super Starslayer TY-PHON - Sky Crisis"
+            and state.opponent_field_count >= 2
+            and state.field
+            and not k9_locked
+        ):
+            for unit in state.field:
+                actions.append(
+                    _action(
+                        "typhon_summon",
+                        extra_name,
+                        materials=(unit.name,),
+                        description=f"Xyz Summon [{extra_name}] over [{unit.name}]; bounce an opponent's high-ATK monster",
+                    )
+                )
         if extra_name == "CXyz N.As.Ch. Knight":
             if k9_locked:
                 continue
@@ -1010,6 +1045,35 @@ def legal_actions(state: SimState, cards: dict[str, CardSpec]) -> list[Action]:
                             description=f"Xyz Summon [{extra_name}] using [{unit.name}] and its attached materials",
                         )
                     )
+
+    if state.opponent_field_count > 0:
+        for unit in state.field:
+            if unit.name == 'K9-66X "Jacks"' and not _used(state, unit.name, "destroy"):
+                actions.append(
+                    _action(
+                        "k9_jacks_destroy",
+                        unit.name,
+                        target="opponent monster",
+                        description=f"Detach 1 material from [{unit.name}] to destroy an opponent monster",
+                    )
+                )
+            if (
+                unit.name == "S:P Little Knight"
+                and state.opponent_hand_effect_activated
+                and not _used(state, unit.name, "banish_both")
+            ):
+                for own_target in state.field:
+                    if own_target.name != unit.name and not own_target.temporary:
+                        actions.append(
+                            _action(
+                                "sp_banish",
+                                unit.name,
+                                target="opponent monster",
+                                materials=(own_target.name,),
+                                description=(f"Activate [{unit.name}]; banish [{own_target.name}] and an opponent monster "
+                                             "until the End Phase"),
+                            )
+                        )
 
     # K9-X Forced Release converts one K9 Xyz into a differently named K9 Xyz and carries materials over.
     if "K9-X Forced Release" in state.hand and not _used(state, "K9-X Forced Release", "activate"):
@@ -1062,6 +1126,7 @@ def legal_actions(state: SimState, cards: dict[str, CardSpec]) -> list[Action]:
         "poplar_free_summon",
         "poplar_gy_set",
         "promethean_revive",
+        "sp_banish",
     }
     pending_triggers = [action for action in actions if action.kind in trigger_kinds]
     return pending_triggers or actions
@@ -1082,7 +1147,9 @@ def apply_action(state: SimState, action: Action, cards: dict[str, CardSpec]) ->
     resources = state.resources_used
     opponent_hand_count = state.opponent_hand_count
     opponent_hand_effect_activated = state.opponent_hand_effect_activated
+    opponent_field_count = state.opponent_field_count
     modeled_disruptions = state.modeled_disruptions
+    modeled_board_breaks = state.modeled_board_breaks
 
     def take_from_deck(name: str) -> None:
         nonlocal deck, resources
@@ -1151,7 +1218,12 @@ def apply_action(state: SimState, action: Action, cards: dict[str, CardSpec]) ->
         field.append(FieldUnit(name, temporary=temporary, k9_extra_lock=k9_extra_lock))
         pending += (name,)
 
-    if action.kind == "normal_summon":
+    if action.kind == "kaiju_tribute":
+        hand = _remove_one(hand, action.card)
+        opponent_field_count = max(0, opponent_field_count - 1)
+        modeled_board_breaks += 1
+        resources += 1
+    elif action.kind == "normal_summon":
         hand = _remove_one(hand, action.card)
         field.append(FieldUnit(action.card, summoned_normally=True))
         pending += (action.card,)
@@ -1248,6 +1320,19 @@ def apply_action(state: SimState, action: Action, cards: dict[str, CardSpec]) ->
         extra = _remove_one(extra, action.card)
         field.append(FieldUnit(action.card, materials=action.materials, material_kind="xyz"))
         resources += 1
+        if action.card == "Super Starslayer TY-PHON - Sky Crisis" and opponent_field_count > 0:
+            opponent_field_count -= 1
+            modeled_board_breaks += 1
+    elif action.kind == "typhon_summon":
+        material = action.materials[0]
+        field = [unit for unit in field if unit.name != material]
+        gy += (material,)
+        sent += (material,)
+        extra = _remove_one(extra, action.card)
+        field.append(FieldUnit(action.card, materials=(material,), material_kind="xyz"))
+        resources += 1
+        opponent_field_count = max(0, opponent_field_count - 1)
+        modeled_board_breaks += 1
     elif action.kind in {"nash_rank_up", "k9_forced_release"}:
         source_unit = next(unit for unit in field if unit.name == action.target)
         field = [unit for unit in field if unit.name != action.target]
@@ -1273,7 +1358,17 @@ def apply_action(state: SimState, action: Action, cards: dict[str, CardSpec]) ->
             gy += (detached,)
             sent += (detached,)
         modeled_disruptions += 1
+        opponent_field_count = max(0, opponent_field_count - 1)
+        modeled_board_breaks += 1
         effects_used = _mark_used(state, action.card, "destroy")
+    elif action.kind == "sp_banish":
+        own_target = action.materials[0]
+        field = [unit for unit in field if unit.name != own_target]
+        banished += (own_target,)
+        opponent_field_count = max(0, opponent_field_count - 1)
+        modeled_disruptions += 1
+        modeled_board_breaks += 1
+        effects_used = _mark_used(state, action.card, "banish_both")
     elif action.kind == "diabellstar_self_summon":
         if action.source == "hand":
             cost = action.costs[0]
@@ -1405,7 +1500,9 @@ def apply_action(state: SimState, action: Action, cards: dict[str, CardSpec]) ->
         resources_used=resources,
         opponent_hand_count=opponent_hand_count,
         opponent_hand_effect_activated=opponent_hand_effect_activated,
+        opponent_field_count=opponent_field_count,
         modeled_disruptions=modeled_disruptions,
+        modeled_board_breaks=modeled_board_breaks,
     )
 
 
@@ -1422,42 +1519,62 @@ def evaluate_board(
         raise ValueError("mode must be 'going_1st' or 'going_2nd'.")
     if weights is None and mode == "going_2nd":
         weights = {
-            "negates": 1.5,
-            "interruptions": 2.0,
-            "card_advantage": 1.2,
-            "total_atk": 0.003,
-            "resources_used": 0.2,
+            "negates": 2.0,
+            "interruptions": 3.5,
+            "board_breaks": 4.5,
+            "card_advantage": 1.3,
+            "total_atk": 0.0015,
+            "resources_used": 0.3,
             "attribute_coverage": 0.25,
-            "target_reached": 10.0,
+            "target_reached": 8.0,
             "target_potential": 4.0,
+            "otk_bonus": 0.0,
         }
     weights = weights or {
         "negates": 4.0,
-        "interruptions": 3.0,
+        "interruptions": 5.0,
+        "board_breaks": 0.0,
         "card_advantage": 1.5,
         "total_atk": 0.001,
         "resources_used": 0.5,
         "attribute_coverage": 0.6,
-        "target_reached": 8.0,
-        "target_potential": 3.0,
+        "target_reached": 4.0,
+        "target_potential": 2.0,
+        "otk_bonus": 0.0,
     }
     established_field = tuple(unit for unit in state.field if not unit.temporary)
     negates = float(sum(cards[unit.name].negates for unit in established_field))
     hand_attributes = Counter(cards[name].attribute for name in state.hand if cards[name].attribute)
-    interruptions = float(state.modeled_disruptions)
+    field_interruptions = 0.0
     for unit in established_field:
         spec = cards[unit.name]
-        if not spec.interruptions:
-            continue
-        if not spec.interruption_requirements or any(
-            all(hand_attributes[attribute] > 0 for attribute in requirement)
-            for requirement in spec.interruption_requirements
+        profile = disruption_profile(unit.name)
+        if profile and profile.get("zone") == "field":
+            activation_key = profile.get("activation_key")
+            if activation_key and _used(state, unit.name, str(activation_key)):
+                continue
+            field_interruptions += float(max(spec.interruptions, int(profile.get("count", 0))))
+        elif spec.interruptions and (
+            not spec.interruption_requirements
+            or any(
+                all(hand_attributes[attribute] > 0 for attribute in requirement)
+                for requirement in spec.interruption_requirements
+            )
         ):
-            interruptions += spec.interruptions
+            field_interruptions += spec.interruptions
+    handtrap_interruptions = float(sum(
+        int(profile.get("count", 1))
+        for name in state.hand
+        if (profile := disruption_profile(name)) and profile.get("zone") == "hand"
+    ))
+    interruptions = field_interruptions + handtrap_interruptions
     attribute_coverage = float(sum(hand_attributes[attribute] > 0 for attribute in ("FIRE", "DARK", "EARTH")))
     card_advantage = float(len(state.hand) + len(established_field) - opponent_hand)
     total_atk = float(sum(cards[unit.name].atk for unit in established_field))
+    otk_damage = total_atk
+    is_otk = otk_damage >= 8000
     resources = float(state.resources_used)
+    board_breaks = float(state.modeled_board_breaks)
     target_reached = float(
         target_card is not None and any(unit.name == target_card and not unit.temporary for unit in state.field)
     )
@@ -1493,6 +1610,12 @@ def evaluate_board(
     components = {
         "negates": negates,
         "interruptions": interruptions,
+        "field_disruptions": field_interruptions,
+        "handtrap_disruptions": handtrap_interruptions,
+        "board_breaks": board_breaks,
+        "otk_damage": otk_damage,
+        "otk_reached": float(is_otk),
+        "disruptions_used": float(state.modeled_disruptions),
         "card_advantage": card_advantage,
         "total_atk": total_atk,
         "resources_used": resources,
@@ -1503,12 +1626,15 @@ def evaluate_board(
     score = (
         weights["negates"] * negates
         + weights["interruptions"] * interruptions
+        + weights.get("board_breaks", 0.0) * board_breaks
         + weights["card_advantage"] * card_advantage
         + weights["total_atk"] * total_atk
         - weights["resources_used"] * resources
         + weights.get("attribute_coverage", 0.6) * attribute_coverage
         + weights.get("target_reached", 8.0) * target_reached
         + weights.get("target_potential", 3.0) * target_potential
+        + weights.get("otk_bonus", 0.0) * float(is_otk)
+        + (20.0 if mode == "going_2nd" and is_otk else 0.0)
     )
     return score, components
 
@@ -1531,6 +1657,9 @@ def _rollout_action(
         "poplar_search": 4.0,
         "oak_revive": 2.0,
         "link_summon": 0.35 if target_card else 1.2,
+        "kaiju_tribute": 5.5,
+        "typhon_summon": 5.0,
+        "k9_jacks_destroy": 3.5,
         "k9_jokul_pair": 7.0,
         "k9_lantern_revive": 5.0,
         "k9_noroi_summon": 6.0,
@@ -1613,6 +1742,7 @@ def run_mcts(
         starting_hand,
         opponent_hand_count=opponent_hand,
         opponent_hand_effect_activated=opponent_hand_effect_activated,
+        opponent_field_count=3 if mode == "going_2nd" else 0,
     )
     unknown = sorted(
         {name for name in (*root_state.hand, *root_state.deck, *root_state.extra_deck) if name not in deck.cards}

@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from html.parser import HTMLParser
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from database_manager import DatabaseManager, hand_hash
@@ -45,6 +46,62 @@ class WebDashboardTests(unittest.TestCase):
         self.assertEqual(first["simulations"], 30)
         self.assertTrue(second["cache_hit"])
         self.assertEqual(second["steps"], first["steps"])
+        if first["steps"]:
+            self.assertTrue({"step_num", "action", "role", "rationale"}.issubset(first["steps"][0]))
+            self.assertTrue(first["steps"][0]["rationale"])
+        self.assertIn("end_board_disruptions", first)
+        self.assertIn("[🛡️ STRATEGY: SET UP DISRUPTIONS]", first["strategy_label"])
+
+    @unittest.skipIf(web_app is None, "Install requirements-web.txt for route swap tests.")
+    def test_swap_evaluator_replays_alternative_and_saves_a_gold_route(self) -> None:
+        route = [
+            "Normal Summon [K9-04 Noroi]",
+            "Activate [K9-04 Noroi] on summon; Special Summon [K9-17 Izuna] from Deck",
+            "Activate [K9-17 Izuna] on summon; send [K9-66a Jokul] from Deck to GY",
+            'Xyz Summon [K9-17 "Ripper"] using [K9-04 Noroi, K9-17 Izuna]',
+        ]
+        starting_hand = [
+            "K9-04 Noroi", "K9-17 Izuna", "Ash Blossom & Joyous Spring",
+            "Vanquish Soul Razen", "Stake your Soul!",
+        ]
+        request = web_app.EvaluateUserSwapRequest(
+            deck_file="vs_k9_deck.json",
+            starting_hand=starting_hand,
+            original_route=route,
+            swapped_step_index=4,
+            user_alternative_action=route[-1],
+            mode="going_1st",
+        )
+
+        def keep_same_state(_deck, _hand, **kwargs):
+            state = kwargs["initial_state"]
+            return SimpleNamespace(
+                actions=[], final_state=state, score=0.0, score_components={}, simulations=1, expanded_nodes=1
+            )
+
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as temp:
+            cache_file = Path(temp) / "combo_cache.db"
+            with patch.object(web_app, "CACHE_DB", cache_file), patch.object(
+                web_app, "run_mcts", side_effect=keep_same_state
+            ):
+                result = web_app.evaluate_user_swap(request)
+            manager = DatabaseManager(cache_file)
+            cached = manager.get_combo(
+                starting_hand,
+                deck_name="Vanquish Soul x K9 (user-supplied list)",
+                mode="going_1st",
+            )
+            manager.close()
+
+        self.assertTrue(result["is_superior"])
+        self.assertTrue(result["gold_route_saved"])
+        self.assertEqual(
+            result["comment"],
+            "Nước đi của bạn rất xuất sắc! Phương án này tối ưu hơn / tiết kiệm tài nguyên hơn AI.",
+        )
+        self.assertIsNotNone(cached)
+        self.assertTrue(cached["is_gold_route"])
+        self.assertEqual(cached["route"]["source"], "interactive_user_swap")
 
     def test_route_lab_frontend_separates_auto_and_human_routes(self) -> None:
         root = Path(__file__).parent.parent
@@ -56,6 +113,9 @@ class WebDashboardTests(unittest.TestCase):
         self.assertIn("range(1, 6)", html)
         self.assertIn('id="human-route-steps"', html)
         self.assertIn("/api/generate-route", script)
+        self.assertIn("/api/evaluate-user-swap", script)
+        self.assertIn("END-BOARD DISRUPTION BREAKDOWN", script)
+        self.assertIn("Vì sao dùng lá này?", script)
         self.assertIn("[...new Set(mainCards.map", script)
         self.assertIn('$("#deck_selector").addEventListener("change", changeDeck)', script)
         self.assertIn("DOMContentLoaded", script)

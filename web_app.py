@@ -33,6 +33,7 @@ except ImportError as exc:  # A clear install message instead of an opaque impor
 
 from generate_combo import parse_hand
 from database_manager import DatabaseManager
+from engine.disruptions import disruption_profile
 from mdm_banlist import MAX_COPIES, normalize_status
 from mcts_search import (
     Action,
@@ -58,7 +59,8 @@ TEMPLATES_DIR = ROOT / "templates"
 STATIC_DIR = ROOT / "static"
 DEFAULT_DECK_FILE = "vs_k9_deck.json"
 AI_ROUTE_ITERATIONS = 15000
-FRONTEND_VERSION = "hand-slots-fix-20261110"
+FRONTEND_VERSION = "interactive-evaluator-20261110"
+SWAP_EVALUATION_ITERATIONS = 1800
 
 
 def _text(value: Any) -> str:
@@ -200,6 +202,15 @@ class GenerateRouteRequest(BaseModel):
     mode: Literal["going_1st", "going_2nd"] = "going_1st"
 
 
+class EvaluateUserSwapRequest(BaseModel):
+    starting_hand: list[str] = Field(min_length=5, max_length=5)
+    original_route: list[str | dict[str, Any]] = Field(min_length=1, max_length=40)
+    swapped_step_index: int = Field(ge=1, le=40)
+    user_alternative_action: str = Field(min_length=2, max_length=500)
+    deck_file: str = DEFAULT_DECK_FILE
+    mode: Literal["going_1st", "going_2nd"] = "going_1st"
+
+
 class VisionStartRequest(BaseModel):
     monitor: int = Field(default=1, ge=1, le=8)
 
@@ -330,6 +341,173 @@ def _route_action(step: str, actions: list[Action]) -> Action | None:
     return best if best_score >= 0.33 else None
 
 
+def _step_action_text(step: str | dict[str, Any]) -> str:
+    if isinstance(step, dict):
+        return _text(step.get("action"))
+    return _text(step)
+
+
+def _new_route_state(deck: DeckModel, hand: list[str], mode: str):
+    return make_initial_state(
+        deck,
+        hand,
+        opponent_hand_effect_activated=mode == "going_2nd",
+        opponent_field_count=3 if mode == "going_2nd" else 0,
+    )
+
+
+def _match_route_action(step: str, actions: list[Action]) -> Action | None:
+    exact = next((action for action in actions if str(action).strip() == step.strip()), None)
+    return exact or _route_action(step, actions)
+
+
+def _role_and_rationale(action: Action) -> tuple[str, str]:
+    kind = action.kind
+    if kind in {"kaiju_tribute", "typhon_summon"} or (
+        kind == "xyz_summon" and "TY-PHON" in action.card
+    ):
+        return "Board Breaker", "Dọn một mối đe dọa trước khi dùng phần tài nguyên còn lại để dựng sân."
+    if kind == "k9_jacks_destroy":
+        return "Disruption", "Dùng hiệu ứng phá hủy để giảm số quái đối phương còn kiểm soát."
+    profile = disruption_profile(action.card)
+    if profile and profile.get("zone") == "field" and kind in {"xyz_summon", "link_summon", "typhon_summon"}:
+        return "Disruption", f"Triệu hồi {action.card} để thiết lập tương tác: {profile['effect']}"
+    if action.costs and ("cost" in action.description.casefold() or "send" in action.description.casefold()):
+        return "Bait", "Đổi một tài nguyên lấy hiệu ứng mở đường, đồng thời có thể kéo negate đối thủ ra sớm."
+    if kind in {
+        "normal_summon", "k9_jokul_pair", "a_case_activate", "wanted_search",
+        "diabellstar_self_summon", "vs_stake", "oss_activate",
+    }:
+        role = "Starter"
+    else:
+        role = "Extender"
+
+    rationales = {
+        "normal_summon": "Đặt starter lên sân để mở các trigger tìm kiếm hoặc triệu hồi của engine.",
+        "k9_jokul_pair": "Triệu hồi cặp K9 Level 5 để mở Xyz Rank 5 mà vẫn giữ các lá thuộc tính trên tay.",
+        "k9_lantern_revive": "Đưa Lantern và một K9 từ Mộ lên sân để nối thêm vật liệu Xyz.",
+        "vs_stake": "Giữ lá được lộ trên tay và gọi Vanquish Soul cùng thuộc tính để tiếp tục engine.",
+        "a_case_activate": "Tìm K9 từ Deck để tăng số lựa chọn mở rộng trước khi khóa tài nguyên.",
+        "vs_search_monster": "Tìm quái Vanquish Soul cần thiết để giữ thuộc tính và chuẩn bị hiệu ứng tương tác.",
+        "vs_search_spelltrap": "Tìm Spell/Trap Vanquish Soul để bổ sung follow-up hoặc tương tác lượt sau.",
+        "k9_izuna_send": "Đưa K9 phù hợp xuống Mộ để bật hồi sinh hoặc chuẩn bị các hiệu ứng K9 tiếp theo.",
+        "k9_ripper_search": "Tách vật liệu để tìm thêm K9; dùng tài nguyên Xyz đổi lấy follow-up.",
+        "xyz_summon": "Chuyển các quái vật thành Xyz để tăng sức ép và mở hiệu ứng theo Rank.",
+        "link_summon": "Chuyển vật liệu thành Link để mở vùng triển khai hoặc dựng tương tác trên sân.",
+        "vs_hollie_sue_deck_summon": "Lộ FIRE và DARK nhưng giữ chúng trên tay để duy trì tương tác Vanquish Soul.",
+        "vs_tag_out": "Đổi loại quái Vanquish Soul trên sân để bật hiệu ứng và giữ nhịp tài nguyên.",
+        "typhon_summon": "Dùng TY-PHON để trả một mối đe dọa lớn về tay và làm chậm sân đối thủ.",
+    }
+    return role, rationales.get(
+        kind,
+        f"Dùng hiệu ứng của {action.card} để mở rộng tài nguyên và tiến gần hơn tới End-Board mục tiêu.",
+    )
+
+
+def _annotate_route(
+    deck: DeckModel,
+    hand: list[str],
+    steps: list[str | dict[str, Any]],
+    *,
+    mode: str,
+) -> list[dict[str, Any]]:
+    state = _new_route_state(deck, hand, mode)
+    output: list[dict[str, Any]] = []
+    for step_num, raw_step in enumerate(steps, start=1):
+        text = _step_action_text(raw_step)
+        available = legal_actions(state, deck.cards)
+        action = _match_route_action(text, available) if text else None
+        if action is None:
+            output.append({
+                "step_num": step_num,
+                "action": text,
+                "role": "Extender",
+                "rationale": "Bước này không khớp operator đang mô hình hóa; hãy kiểm tra lại với OCG Core.",
+                "alternatives": [],
+            })
+            continue
+        role, rationale = _role_and_rationale(action)
+        output.append({
+            "step_num": step_num,
+            "action": str(action),
+            "role": role,
+            "rationale": rationale,
+            "alternatives": [str(candidate) for candidate in available if candidate != action][:60],
+        })
+        state = apply_action(state, action, deck.cards)
+    return output
+
+
+def _replay_route(
+    deck: DeckModel,
+    hand: list[str],
+    steps: list[str | dict[str, Any]],
+    *,
+    mode: str,
+) -> tuple[Any, list[str]]:
+    state = _new_route_state(deck, hand, mode)
+    applied: list[str] = []
+    for step_num, raw_step in enumerate(steps, start=1):
+        text = _step_action_text(raw_step)
+        actions = legal_actions(state, deck.cards)
+        action = _match_route_action(text, actions) if text else None
+        if action is None:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "step": step_num,
+                    "message": f"Route step is not a modeled legal action: {text}",
+                    "available_actions": [str(candidate) for candidate in actions[:20]],
+                },
+            )
+        applied.append(str(action))
+        state = apply_action(state, action, deck.cards)
+    return state, applied
+
+
+def _endboard_disruption_breakdown(state: Any, deck: DeckModel) -> list[dict[str, Any]]:
+    counts: Counter[tuple[str, str, str, str]] = Counter()
+    for unit in state.field:
+        if unit.temporary:
+            continue
+        spec = deck.cards[unit.name]
+        profile = disruption_profile(unit.name)
+        if profile and profile.get("zone") == "field":
+            key = profile.get("activation_key")
+            if key and f"{unit.name}::{key}" in state.effects_used:
+                continue
+            if spec.interruption_requirements:
+                hand_attributes = {deck.cards[name].attribute for name in state.hand}
+                if not any(all(attribute in hand_attributes for attribute in group)
+                           for group in spec.interruption_requirements):
+                    continue
+            counts[(unit.name, "Sân", str(profile["type"]), str(profile["effect"]))] += int(profile.get("count", 1))
+        elif spec.interruptions:
+            hand_attributes = {deck.cards[name].attribute for name in state.hand}
+            if spec.interruption_requirements and not any(
+                all(attribute in hand_attributes for attribute in group)
+                for group in spec.interruption_requirements
+            ):
+                continue
+            counts[(unit.name, "Sân", "Tương tác", "Hiệu ứng tương tác được khai báo trong card model.")] += spec.interruptions
+    for name in state.hand:
+        profile = disruption_profile(name)
+        if profile and profile.get("zone") == "hand":
+            counts[(name, "Tay", str(profile["type"]), str(profile["effect"]))] += int(profile.get("count", 1))
+    return [
+        {"card": card, "zone": zone, "type": kind, "effect": effect, "count": count}
+        for (card, zone, kind, effect), count in sorted(counts.items())
+    ]
+
+
+def _strategy_label(mode: str, components: dict[str, Any]) -> str:
+    if mode != "going_2nd":
+        return "[🛡️ STRATEGY: SET UP DISRUPTIONS]"
+    if float(components.get("otk_damage", 0)) >= 8000:
+        return "[🔥 STRATEGY: OTK ROUTE]"
+    return "[🛡️ BOARD BREAK & RE-CONTROL]"
+
+
 def evaluate_human_route(request: BenchmarkRequest) -> dict[str, Any]:
     if request.mode not in {"going_1st", "going_2nd"}:
         raise HTTPException(status_code=422, detail="Mode must be going_1st or going_2nd.")
@@ -339,7 +517,7 @@ def evaluate_human_route(request: BenchmarkRequest) -> dict[str, Any]:
         hand = parse_hand(deck, "|".join(request.hand))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    state = make_initial_state(deck, hand)
+    state = _new_route_state(deck, hand, request.mode)
     applied: list[str] = []
     for index, raw_step in enumerate(request.route_steps, start=1):
         step = raw_step.strip()
@@ -384,11 +562,13 @@ def evaluate_human_route(request: BenchmarkRequest) -> dict[str, Any]:
     )
     return {
         "hand": hand,
-        "steps": applied,
+        "steps": _annotate_route(deck, hand, applied, mode=request.mode),
         "end_board": end_board,
+        "end_board_disruptions": _endboard_disruption_breakdown(state, deck),
         "score": round(score, 4),
         "baseline_score": round(baseline.score, 4),
         "score_components": components,
+        "strategy_label": _strategy_label(request.mode, components),
         "mode": request.mode,
         "is_gold_route": cache_result["is_gold_route"],
         "hand_hash": cache_result["hand_hash"],
@@ -402,7 +582,7 @@ def generate_ai_route(request: GenerateRouteRequest) -> dict[str, Any]:
     deck = load_deck_model(path.name, path.stat().st_mtime_ns)
     try:
         hand = parse_hand(deck, "|".join(request.hand))
-        initial_state = make_initial_state(deck, hand)
+        initial_state = _new_route_state(deck, hand, request.mode)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -412,18 +592,27 @@ def generate_ai_route(request: GenerateRouteRequest) -> dict[str, Any]:
         cached_route = cached.get("route") or {}
         source = cached_route.get("source")
         if cached["is_gold_route"] or source == "mcts":
-            return {
-                "hand": hand,
-                "steps": cached_route.get("steps", []),
-                "end_board": cached.get("end_board", []),
-                "score": round(float(cached["score"]), 4),
-                "score_components": cached_route.get("score_components", {}),
-                "mode": request.mode,
-                "cache_hit": True,
-                "is_gold_route": cached["is_gold_route"],
-                "simulations": cached_route.get("simulations", 0),
-                "expanded_nodes": cached_route.get("expanded_nodes", 0),
-            }
+            cached_steps = cached_route.get("steps", [])
+            try:
+                cached_state, _ = _replay_route(deck, hand, cached_steps, mode=request.mode)
+            except HTTPException:
+                cached_state = None
+            if cached_state is not None:
+                cached_score, score_components = evaluate_board(cached_state, deck.cards, mode=request.mode)
+                return {
+                    "hand": hand,
+                    "steps": _annotate_route(deck, hand, cached_steps, mode=request.mode),
+                    "end_board": [unit.name for unit in cached_state.field],
+                    "end_board_disruptions": _endboard_disruption_breakdown(cached_state, deck),
+                    "score": round(cached_score, 4),
+                    "score_components": score_components,
+                    "mode": request.mode,
+                    "strategy_label": _strategy_label(request.mode, score_components),
+                    "cache_hit": True,
+                    "is_gold_route": cached["is_gold_route"],
+                    "simulations": cached_route.get("simulations", 0),
+                    "expanded_nodes": cached_route.get("expanded_nodes", 0),
+                }
 
     result = run_mcts(
         deck,
@@ -453,15 +642,139 @@ def generate_ai_route(request: GenerateRouteRequest) -> dict[str, Any]:
     )
     return {
         "hand": hand,
-        "steps": steps,
+        "steps": _annotate_route(deck, hand, steps, mode=request.mode),
         "end_board": end_board,
+        "end_board_disruptions": _endboard_disruption_breakdown(result.final_state, deck),
         "score": round(result.score, 4),
         "score_components": result.score_components,
         "mode": request.mode,
+        "strategy_label": _strategy_label(request.mode, result.score_components),
         "cache_hit": False,
         "is_gold_route": False,
         "simulations": result.simulations,
         "expanded_nodes": result.expanded_nodes,
+    }
+
+
+def _swap_feedback(
+    user_score: float,
+    ai_score: float,
+    user_components: dict[str, float],
+    ai_components: dict[str, float],
+) -> tuple[bool, str]:
+    if user_score >= ai_score:
+        return True, "Nước đi của bạn rất xuất sắc! Phương án này tối ưu hơn / tiết kiệm tài nguyên hơn AI."
+    losses: list[str] = []
+    for key, label in (
+        ("interruptions", "lượt ngắt ở End-Board"),
+        ("board_breaks", "lượt phá board được mô hình hóa"),
+        ("card_advantage", "lợi thế bài trên tay/sân"),
+        ("total_atk", "sát thương tiềm năng trên sân"),
+    ):
+        difference = float(ai_components.get(key, 0)) - float(user_components.get(key, 0))
+        if difference > 0.01:
+            amount = int(difference) if difference.is_integer() else round(difference, 1)
+            losses.append(f"phương án mất {amount} {label}")
+    resource_loss = float(user_components.get("resources_used", 0)) - float(ai_components.get("resources_used", 0))
+    if resource_loss > 0.01:
+        amount = int(resource_loss) if resource_loss.is_integer() else round(resource_loss, 1)
+        losses.append(f"tiêu tốn thêm {amount} tài nguyên Deck/Extra Deck")
+    reason = "; ".join(losses) if losses else "điểm End-Board tổng thể thấp hơn theo trọng số của chế độ đang chọn"
+    return False, f"Phương án này đang thấp hơn AI ({reason})."
+
+
+def evaluate_user_swap(request: EvaluateUserSwapRequest) -> dict[str, Any]:
+    """Replace one route action, optimize the remaining line, compare and learn Gold routes."""
+    if request.swapped_step_index > len(request.original_route):
+        raise HTTPException(status_code=422, detail="swapped_step_index is outside original_route.")
+    path = _safe_deck_file(request.deck_file)
+    deck = load_deck_model(path.name, path.stat().st_mtime_ns)
+    try:
+        hand = parse_hand(deck, "|".join(request.starting_hand))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    original_state, original_actions = _replay_route(
+        deck, hand, request.original_route, mode=request.mode
+    )
+    ai_score, ai_components = evaluate_board(original_state, deck.cards, mode=request.mode)
+
+    prefix = request.original_route[: request.swapped_step_index - 1]
+    prefix_state, prefix_actions = _replay_route(deck, hand, prefix, mode=request.mode)
+    legal = legal_actions(prefix_state, deck.cards)
+    selected = _match_route_action(request.user_alternative_action, legal)
+    if selected is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Nước thay thế chưa khớp với action hợp lệ tại bước này.",
+                "available_actions": [str(action) for action in legal[:30]],
+            },
+        )
+
+    swapped_state = apply_action(prefix_state, selected, deck.cards)
+    continuation = run_mcts(
+        deck,
+        hand,
+        iterations=SWAP_EVALUATION_ITERATIONS,
+        rollout_depth=24,
+        seed=29,
+        mode=request.mode,
+        initial_state=swapped_state,
+    )
+    user_state = continuation.final_state
+    user_score, user_components = evaluate_board(user_state, deck.cards, mode=request.mode)
+    user_actions = prefix_actions + [str(selected)] + [str(action) for action in continuation.actions]
+    is_superior, comment = _swap_feedback(user_score, ai_score, user_components, ai_components)
+    end_board = [unit.name for unit in user_state.field]
+    gold_route_saved = False
+    hand_hash_value = None
+    if is_superior:
+        hand_hash_value = DatabaseManager(CACHE_DB).save_combo(
+            hand=hand,
+            deck_name=deck.name,
+            route_steps=user_actions,
+            end_board=end_board,
+            score=user_score,
+            is_gold_route=True,
+            mode=request.mode,
+            metadata={
+                "source": "interactive_user_swap",
+                "score_components": user_components,
+                "baseline_score": ai_score,
+                "swapped_step_index": request.swapped_step_index,
+                "user_alternative_action": str(selected),
+                "iterations": continuation.simulations,
+            },
+        )
+        gold_route_saved = True
+    route = {
+        "hand": hand,
+        "steps": _annotate_route(deck, hand, user_actions, mode=request.mode),
+        "end_board": end_board,
+        "end_board_disruptions": _endboard_disruption_breakdown(user_state, deck),
+        "score": round(user_score, 4),
+        "score_components": user_components,
+        "strategy_label": _strategy_label(request.mode, user_components),
+        "mode": request.mode,
+        "simulations": continuation.simulations,
+        "expanded_nodes": continuation.expanded_nodes,
+        "cache_hit": False,
+        "is_gold_route": is_superior,
+    }
+    return {
+        "is_superior": is_superior,
+        "comment": comment,
+        "V_user": round(user_score, 4),
+        "V_ai": round(ai_score, 4),
+        "score_delta": round(user_score - ai_score, 4),
+        "user_score_components": user_components,
+        "ai_score_components": ai_components,
+        "gold_route_saved": gold_route_saved,
+        "hand_hash": hand_hash_value,
+        "steps": route["steps"],
+        "route": route,
+        "original_route_steps": original_actions,
     }
 
 
@@ -546,6 +859,11 @@ async def benchmark_route(payload: BenchmarkRequest) -> dict[str, Any]:
 @app.post("/api/generate-route")
 async def generate_route(payload: GenerateRouteRequest) -> dict[str, Any]:
     return await run_in_threadpool(generate_ai_route, payload)
+
+
+@app.post("/api/evaluate-user-swap")
+async def evaluate_user_route_swap(payload: EvaluateUserSwapRequest) -> dict[str, Any]:
+    return await run_in_threadpool(evaluate_user_swap, payload)
 
 
 @app.get("/api/vision/status")

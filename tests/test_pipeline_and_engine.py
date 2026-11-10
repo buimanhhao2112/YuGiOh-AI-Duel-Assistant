@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ from mdm_scraper import (
 from mcts_search import (
     CardSpec,
     DeckModel,
+    FieldUnit,
     apply_action,
     legal_actions,
     load_deck,
@@ -189,6 +191,58 @@ class StateTests(unittest.TestCase):
 
 
 class MCTSTests(unittest.TestCase):
+    def test_first_turn_values_handtraps_and_field_interruptions_at_five(self) -> None:
+        cards = {
+            "Ash Blossom & Joyous Spring": CardSpec("Ash Blossom & Joyous Spring"),
+            "Field Breaker": CardSpec("Field Breaker", interruptions=1),
+        }
+        deck = DeckModel("test", ("Ash Blossom & Joyous Spring",), (), cards)
+        state = make_initial_state(deck, ["Ash Blossom & Joyous Spring"])
+        state = replace(state, field=(FieldUnit("Field Breaker"),))
+        score, components = evaluate_board(state, cards, mode="going_1st")
+        self.assertEqual(components["field_disruptions"], 1)
+        self.assertEqual(components["handtrap_disruptions"], 1)
+        self.assertEqual(components["interruptions"], 2)
+        self.assertEqual(score, 5.5)
+
+    def test_going_second_models_kaiju_banish_and_typhon_breaks(self) -> None:
+        root = Path(__file__).parent.parent
+        deck = load_deck(root / "examples" / "vs_k9_deck.json", root / "data" / "banlist.json")
+        state = make_initial_state(
+            deck,
+            ["Dogoran, the Mad Flame Kaiju"],
+            opponent_hand_effect_activated=True,
+            opponent_field_count=3,
+        )
+        kaiju = next(action for action in legal_actions(state, deck.cards) if action.kind == "kaiju_tribute")
+        state = apply_action(state, kaiju, deck.cards)
+        self.assertEqual(state.modeled_board_breaks, 1)
+        self.assertEqual(state.opponent_field_count, 2)
+
+        state = replace(
+            state,
+            hand=("Vanquish Soul Razen",),
+            field=(FieldUnit("Vanquish Soul Razen"),),
+            extra_deck=tuple(name for name in deck.extra_deck if name == "Super Starslayer TY-PHON - Sky Crisis"),
+        )
+        typhon = next(action for action in legal_actions(state, deck.cards) if action.kind == "typhon_summon")
+        state = apply_action(state, typhon, deck.cards)
+        self.assertEqual(state.field[-1].name, "Super Starslayer TY-PHON - Sky Crisis")
+        self.assertEqual(state.opponent_field_count, 1)
+        self.assertEqual(state.modeled_board_breaks, 2)
+
+        state = replace(
+            state,
+            field=(FieldUnit("S:P Little Knight"), FieldUnit("Vanquish Soul Razen")),
+            opponent_field_count=1,
+        )
+        sp_banish = next(action for action in legal_actions(state, deck.cards) if action.kind == "sp_banish")
+        state = apply_action(state, sp_banish, deck.cards)
+        self.assertEqual(state.opponent_field_count, 0)
+        self.assertEqual(state.modeled_board_breaks, 3)
+        _, components = evaluate_board(state, deck.cards, mode="going_2nd")
+        self.assertEqual(components["board_breaks"], 3)
+
     def test_mcts_discovers_an_extra_deck_target(self) -> None:
         cards = {
             "Fire A": CardSpec("Fire A", level=1, attribute="FIRE", atk=800, effect_monster=True, normal_summon=True),

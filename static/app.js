@@ -11,6 +11,8 @@
     extra: new Map(),
     activeZone: "main",
     detectedHand: [],
+    currentRoute: null,
+    pendingSwapStep: null,
     visionTimer: null,
     toastTimer: null,
   };
@@ -310,14 +312,59 @@
   function renderRouteResult(resultBox, result, { human = false } = {}) {
     resultBox.replaceChildren();
     resultBox.classList.remove("hidden", "error");
+    if (!human) {
+      state.currentRoute = {
+        hand: result.hand || [],
+        steps: result.steps || [],
+        deck_file: $("#deck_selector").value,
+        mode: result.mode || $("#ai-route-mode").value,
+      };
+    }
     const summary = document.createElement("div");
     const outcome = human
       ? `${result.is_gold_route ? "🏆 GOLD ROUTE" : "Route được mô phỏng"} · score ${result.score} · MCTS ${result.baseline_score}`
       : `${result.cache_hit ? "⚡ Route từ cache" : "⚡ MCTS đã tìm route"} · score ${result.score} · ${result.simulations} lượt · ${result.expanded_nodes} node`;
     summary.className = "route-result-summary";
-    summary.textContent = `${outcome} · ${result.mode} · End-board: ${result.end_board.join(" + ") || "field trống"}`;
+    summary.textContent = `${result.strategy_label ? `${result.strategy_label} · ` : ""}${outcome} · ${result.mode} · End-board: ${(result.end_board || []).join(" + ") || "field trống"}`;
     resultBox.append(summary);
     const steps = result.steps || [];
+
+    const breakdownHeading = document.createElement("h3");
+    breakdownHeading.className = "route-disruption-heading";
+    breakdownHeading.textContent = "🛡️ END-BOARD DISRUPTION BREAKDOWN";
+    resultBox.append(breakdownHeading);
+    const breakdown = result.end_board_disruptions || [];
+    if (!breakdown.length) {
+      const emptyBreakdown = document.createElement("div");
+      emptyBreakdown.className = "route-result-empty";
+      emptyBreakdown.textContent = "Chưa có tương tác được card model đánh dấu trên End-Board hoặc tay bài.";
+      resultBox.append(emptyBreakdown);
+    } else {
+      const table = document.createElement("table");
+      table.className = "route-disruption-table";
+      const head = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      ["LÁ BÀI", "VỊ TRÍ", "LOẠI", "TƯƠNG TÁC"].forEach((label) => {
+        const cell = document.createElement("th");
+        cell.textContent = label;
+        headerRow.append(cell);
+      });
+      head.append(headerRow);
+      const body = document.createElement("tbody");
+      breakdown.forEach((entry) => {
+        const row = document.createElement("tr");
+        [entry.count > 1 ? `${entry.card} ×${entry.count}` : entry.card, entry.zone, entry.type, entry.effect].forEach((value, index) => {
+          const cell = document.createElement("td");
+          if (index === 3) cell.className = "route-disruption-effect";
+          cell.textContent = value || "";
+          row.append(cell);
+        });
+        body.append(row);
+      });
+      table.append(head, body);
+      resultBox.append(table);
+    }
+
     if (!steps.length) {
       const empty = document.createElement("div");
       empty.className = "route-result-empty";
@@ -327,12 +374,121 @@
     }
     const list = document.createElement("ol");
     list.className = "route-result-list";
-    steps.forEach((step, index) => {
+    steps.forEach((entry, index) => {
+      const step = typeof entry === "string" ? { action: entry, step_num: index + 1 } : entry;
       const item = document.createElement("li");
-      item.textContent = `Bước ${index + 1}: ${step}`;
+      item.className = "route-step";
+      const head = document.createElement("div");
+      head.className = "route-step-head";
+      const title = document.createElement("span");
+      title.className = "route-step-title";
+      title.textContent = `Bước ${step.step_num || index + 1}: ${step.action || ""}`;
+      head.append(title);
+      if (step.role) {
+        const role = document.createElement("span");
+        role.className = "route-step-role";
+        role.textContent = step.role;
+        head.append(role);
+      }
+      item.append(head);
+      const rationale = document.createElement("p");
+      rationale.className = "route-step-rationale hidden";
+      rationale.textContent = step.rationale || "Chưa có lời giải thích cho bước này.";
+      const controls = document.createElement("div");
+      controls.className = "route-step-controls";
+      const whyButton = document.createElement("button");
+      whyButton.type = "button";
+      whyButton.textContent = "ⓘ Vì sao dùng lá này?";
+      whyButton.addEventListener("click", () => {
+        rationale.classList.toggle("hidden");
+        whyButton.textContent = rationale.classList.contains("hidden") ? "ⓘ Vì sao dùng lá này?" : "Ẩn giải thích";
+      });
+      controls.append(whyButton);
+      if (!human && state.currentRoute) {
+        const swapButton = document.createElement("button");
+        swapButton.type = "button";
+        swapButton.textContent = "✏️ Thử Đổi Lá/Nước Đi";
+        swapButton.addEventListener("click", () => openSwapModal(step));
+        controls.append(swapButton);
+      }
+      item.append(controls, rationale);
       list.append(item);
     });
     resultBox.append(list);
+  }
+
+  function openSwapModal(step) {
+    if (!state.currentRoute) return;
+    state.pendingSwapStep = Number(step.step_num) || 1;
+    $("#swap-step-context").textContent = `Bước ${state.pendingSwapStep}: ${step.action || ""}`;
+    const select = $("#swap-action-select");
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Chọn một action khác…";
+    select.replaceChildren(placeholder);
+    [...new Set(step.alternatives || [])].forEach((action) => {
+      const option = document.createElement("option");
+      option.value = action;
+      option.textContent = action;
+      select.append(option);
+    });
+    $("#swap-action-input").value = "";
+    const feedback = $("#swap-feedback");
+    feedback.classList.add("hidden");
+    feedback.classList.remove("superior", "inferior");
+    feedback.textContent = "";
+    $("#evaluate-swap").disabled = false;
+    $("#swap-modal").classList.remove("hidden");
+    $("#swap-modal").setAttribute("aria-hidden", "false");
+    $("#swap-action-select").focus();
+  }
+
+  function closeSwapModal() {
+    $("#swap-modal").classList.add("hidden");
+    $("#swap-modal").setAttribute("aria-hidden", "true");
+    state.pendingSwapStep = null;
+  }
+
+  async function evaluateSwap() {
+    if (!state.currentRoute || !state.pendingSwapStep) return;
+    const selectedAction = $("#swap-action-input").value.trim() || $("#swap-action-select").value;
+    if (!selectedAction) {
+      showToast("Chọn hoặc nhập action thay thế trước khi gửi.", true);
+      return;
+    }
+    const button = $("#evaluate-swap");
+    const feedback = $("#swap-feedback");
+    button.disabled = true;
+    button.textContent = "AI đang tính lại End-Board…";
+    feedback.classList.remove("hidden", "superior", "inferior");
+    feedback.textContent = "Đang replay route và tối ưu phần còn lại bằng MCTS…";
+    try {
+      const route = state.currentRoute;
+      const result = await api("/api/evaluate-user-swap", {
+        method: "POST",
+        body: JSON.stringify({
+          starting_hand: route.hand,
+          original_route: route.steps.map(({ step_num, action, role, rationale }) => ({ step_num, action, role, rationale })),
+          swapped_step_index: state.pendingSwapStep,
+          user_alternative_action: selectedAction,
+          deck_file: route.deck_file,
+          mode: route.mode,
+        }),
+      });
+      feedback.classList.toggle("superior", result.is_superior);
+      feedback.classList.toggle("inferior", !result.is_superior);
+      feedback.textContent = `${result.comment} · V_user ${result.V_user} / V_AI ${result.V_ai} · Δ ${result.score_delta}${result.gold_route_saved ? " · Đã lưu Gold Route." : ""}`;
+      if (result.is_superior && result.route) {
+        renderRouteResult($("#ai-route-result"), result.route);
+      }
+    } catch (error) {
+      feedback.classList.remove("superior");
+      feedback.classList.add("inferior");
+      feedback.textContent = error.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Gửi AI Chấm Điểm";
+    }
   }
 
   async function generateAiRoute() {
@@ -519,6 +675,12 @@
     });
     $("#generate-ai-route").addEventListener("click", generateAiRoute);
     $("#benchmark-route").addEventListener("click", benchmarkRoute);
+    $("#close-swap-modal").addEventListener("click", closeSwapModal);
+    $("#cancel-swap").addEventListener("click", closeSwapModal);
+    $("#evaluate-swap").addEventListener("click", evaluateSwap);
+    $("#swap-modal").addEventListener("click", (event) => {
+      if (event.target === $("#swap-modal")) closeSwapModal();
+    });
     $("#scan-once").addEventListener("click", scanOnce);
     $("#toggle-vision").addEventListener("click", toggleVision);
     $("#use-detected-hand").addEventListener("click", () => {
@@ -536,6 +698,9 @@
       hand.forEach((name, index) => { slots[index].value = name; });
     });
     document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !$("#swap-modal").classList.contains("hidden")) {
+        closeSwapModal();
+      }
       if (event.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
         event.preventDefault(); $("#card-search").focus();
       }

@@ -79,6 +79,22 @@ class DatabaseManager:
                     connection.execute(
                         "CREATE INDEX IF NOT EXISTS idx_combos_context ON combos(deck_name, mode, hand_hash)"
                     )
+                    connection.execute(
+                        """CREATE TABLE IF NOT EXISTS gold_routes (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            hand_hash TEXT NOT NULL,
+                            deck_name TEXT NOT NULL,
+                            route_json TEXT NOT NULL,
+                            end_board TEXT NOT NULL,
+                            score REAL NOT NULL,
+                            created_at TEXT NOT NULL,
+                            mode TEXT NOT NULL DEFAULT 'going_1st'
+                        )"""
+                    )
+                    connection.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_gold_routes_context_score "
+                        "ON gold_routes(deck_name, mode, hand_hash, score DESC)"
+                    )
                     connection.commit()
                     _SCHEMA_READY.add(key)
         pool[key] = connection
@@ -100,11 +116,32 @@ class DatabaseManager:
     ) -> dict[str, Any] | None:
         key = hand_hash(hand)
         connection = self._connect()
-        row = connection.execute(
+        gold_query = (
             "SELECT hand_hash, deck_name, route_json, end_board, score, "
-            "is_gold_route, created_at, mode FROM combos WHERE hand_hash = ?",
-            (key,),
-        ).fetchone()
+            "1 AS is_gold_route, created_at, mode FROM gold_routes WHERE hand_hash = ?"
+        )
+        gold_parameters: list[Any] = [key]
+        if deck_name is not None:
+            gold_query += " AND deck_name = ? COLLATE NOCASE"
+            gold_parameters.append(deck_name)
+        if mode is not None:
+            gold_query += " AND mode = ?"
+            gold_parameters.append(mode)
+        gold_query += " ORDER BY score DESC, created_at DESC LIMIT 1"
+        row = connection.execute(gold_query, gold_parameters).fetchone()
+        if row is None:
+            query = (
+                "SELECT hand_hash, deck_name, route_json, end_board, score, "
+                "is_gold_route, created_at, mode FROM combos WHERE hand_hash = ?"
+            )
+            parameters: list[Any] = [key]
+            if deck_name is not None:
+                query += " AND deck_name = ? COLLATE NOCASE"
+                parameters.append(deck_name)
+            if mode is not None:
+                query += " AND mode = ?"
+                parameters.append(mode)
+            row = connection.execute(query, parameters).fetchone()
         if row is None:
             return None
         value = dict(row)
@@ -130,6 +167,7 @@ class DatabaseManager:
         metadata: dict[str, Any] | None = None,
     ) -> str:
         hand_list = list(hand)
+        end_board_list = list(end_board)
         key = hand_hash(hand_list)
         route = {
             "hand": hand_list,
@@ -144,13 +182,26 @@ class DatabaseManager:
                 (key,),
             ).fetchone()
             same_context = current and current["deck_name"].casefold() == deck_name.casefold() and current["mode"] == mode
+            if is_gold_route:
+                connection.execute(
+                    """INSERT INTO gold_routes(hand_hash, deck_name, route_json, end_board, score, created_at, mode)
+                       VALUES(?, ?, ?, ?, ?, datetime('now'), ?)""",
+                    (
+                        key,
+                        deck_name,
+                        json.dumps(route, ensure_ascii=False),
+                        json.dumps(end_board_list, ensure_ascii=False),
+                        float(score),
+                        mode,
+                    ),
+                )
             if same_context and current["is_gold_route"] and not is_gold_route:
                 connection.commit()
                 return key
             if same_context and current["is_gold_route"] and is_gold_route and current["score"] > score:
                 connection.commit()
                 return key
-            if same_context and not is_gold_route and current["score"] > score:
+            if same_context and not current["is_gold_route"] and not is_gold_route and current["score"] > score:
                 connection.commit()
                 return key
             connection.execute(
@@ -165,7 +216,7 @@ class DatabaseManager:
                     key,
                     deck_name,
                     json.dumps(route, ensure_ascii=False),
-                    json.dumps(list(end_board), ensure_ascii=False),
+                    json.dumps(end_board_list, ensure_ascii=False),
                     float(score),
                     int(is_gold_route),
                     mode,

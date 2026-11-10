@@ -170,6 +170,26 @@
       <footer class="page-footer"><span>Yu-Gi-Oh! AI Duel Assistant</span><span>Local prototype · No auto-play · Validate routes with OCG Core</span></footer>
     </main>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="swap-modal" class="swap-modal hidden" aria-hidden="true">
+      <section class="swap-dialog" role="dialog" aria-modal="true" aria-labelledby="swap-title">
+        <div class="swap-dialog-heading">
+          <div><p class="eyebrow">INTERACTIVE ROUTE EVALUATOR</p><h2 id="swap-title">Thử đổi nước đi</h2></div>
+          <button id="close-swap-modal" class="icon-button" type="button" aria-label="Đóng">×</button>
+        </div>
+        <p id="swap-step-context" class="panel-description"></p>
+        <label class="swap-field">ACTION HỢP LỆ TẠI BƯỚC NÀY
+          <select id="swap-action-select" class="text-input"><option value="">Chọn một action khác…</option></select>
+        </label>
+        <label class="swap-field">HOẶC NHẬP ACTION
+          <input id="swap-action-input" class="text-input" maxlength="500" placeholder="Nhập action thay thế">
+        </label>
+        <div id="swap-feedback" class="swap-feedback hidden" aria-live="polite"></div>
+        <div class="swap-dialog-actions">
+          <button id="cancel-swap" class="button button-muted" type="button">Đóng</button>
+          <button id="evaluate-swap" class="button button-primary" type="button">Gửi AI Chấm Điểm</button>
+        </div>
+      </section>
+    </div>
   </div>
 </body>
 </html>
