@@ -217,23 +217,42 @@
     document.querySelectorAll(".deck-list").forEach((list) => list.classList.toggle("active", list.dataset.zone === zone));
   }
 
-  async function loadDeckIndex() {
+  async function loadDeckIndex(preferredFile = "") {
     const result = await api("/api/decks");
     state.deckIndex = result.decks || [];
-    const select = $("#deck-select");
-    select.replaceChildren();
-    state.deckIndex.forEach((deck) => {
-      const option = document.createElement("option");
-      option.value = deck.file;
-      option.textContent = `${deck.name} (${deck.main_count}/${deck.extra_count})`;
-      select.append(option);
-    });
-    if (state.deckIndex.some((deck) => deck.file === "vs_k9_deck.json")) select.value = "vs_k9_deck.json";
+    const selectedFile = state.deckIndex.some((deck) => deck.file === preferredFile)
+      ? preferredFile
+      : state.deckIndex[0]?.file || "";
+    for (const selector of [$("#deck-select"), $("#deck_selector")]) {
+      selector.replaceChildren();
+      state.deckIndex.forEach((deck) => {
+        const option = document.createElement("option");
+        option.value = deck.file;
+        option.textContent = `${deck.name} (${deck.main_count}/${deck.extra_count})`;
+        selector.append(option);
+      });
+      if (!state.deckIndex.length) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "Chưa có deck";
+        selector.append(option);
+      }
+      selector.value = selectedFile;
+    }
   }
 
-  async function loadSelectedDeck() {
-    const file = $("#deck-select").value;
-    if (!file) return;
+  async function loadSelectedDeck(file = $("#deck_selector").value, { showLoading = true } = {}) {
+    if (!file) {
+      state.main.clear();
+      state.extra.clear();
+      state.deckMainCounts.clear();
+      renderHandSlots([]);
+      renderDeck();
+      return;
+    }
+    $("#deck-select").value = file;
+    $("#deck_selector").value = file;
+    if (showLoading) renderHandSlots([], "Đang nạp bài từ deck…");
     const raw = await api(`/api/decks/${encodeURIComponent(file)}`);
     state.main.clear();
     state.extra.clear();
@@ -241,17 +260,18 @@
     state.deckMainCounts = countDeckCards(mainCards);
     for (const [name, count] of state.deckMainCounts) state.main.set(name, count);
     for (const [name, count] of countDeckCards(raw.extra_deck || [])) state.extra.set(name, count);
-    renderHandSlots(Array.from(new Set(mainCards.map((entry) => entry.name).filter(Boolean))));
+    const uniqueCardNames = [...new Set(mainCards.map((entry) => String(entry.name || "").trim()).filter(Boolean))];
+    renderHandSlots(uniqueCardNames);
     $("#deck-name").value = raw.name || file.replace(/\.json$/i, "");
     renderDeck();
-    showToast(`Đã nạp ${raw.name || file}.`);
+    $("#deck-message").textContent = `${uniqueCardNames.length} tên bài trong Main Deck`;
   }
 
-  function renderHandSlots(uniqueCardNames) {
+  function renderHandSlots(uniqueCardNames, placeholderText = "Chọn lá bài…") {
     document.querySelectorAll(".hand-card-select").forEach((select, index) => {
       const placeholder = document.createElement("option");
       placeholder.value = "";
-      placeholder.textContent = "Chọn lá bài…";
+      placeholder.textContent = placeholderText;
       select.replaceChildren(placeholder);
       uniqueCardNames.forEach((name) => {
         const option = document.createElement("option");
@@ -274,9 +294,8 @@
     try {
       const saved = await api("/api/decks", { method: "POST", body: JSON.stringify(payload) });
       message.textContent = `Lưu thành ${saved.file}`;
-      await loadDeckIndex();
-      $("#deck-select").value = saved.file;
-      await loadSelectedDeck();
+      await loadDeckIndex(saved.file);
+      await loadSelectedDeck(saved.file);
       showToast(`Đã lưu deck vào examples/${saved.file}.`);
     } catch (error) {
       message.textContent = "Không lưu được";
@@ -341,7 +360,7 @@
       const result = await api("/api/generate-route", {
         method: "POST",
         body: JSON.stringify({
-          deck_file: $("#deck-select").value || "vs_k9_deck.json",
+          deck_file: $("#deck_selector").value || "vs_k9_deck.json",
           hand,
           mode: $("#ai-route-mode").value,
         }),
@@ -378,7 +397,7 @@
       const result = await api("/api/benchmark-route", {
         method: "POST",
         body: JSON.stringify({
-          deck_file: $("#deck-select").value || "vs_k9_deck.json",
+          deck_file: $("#deck_selector").value || "vs_k9_deck.json",
           hand,
           route_steps: routeSteps,
           mode: $("#human-route-mode").value,
@@ -487,8 +506,13 @@
     $("#type-filter").addEventListener("change", scheduleSearch);
     $("#attribute-filter").addEventListener("change", scheduleSearch);
     document.querySelectorAll(".deck-tab").forEach((tab) => tab.addEventListener("click", () => setActiveZone(tab.dataset.zone)));
-    $("#load-deck").addEventListener("click", () => loadSelectedDeck().catch((error) => showToast(error.message, true)));
-    $("#deck-select").addEventListener("change", () => loadSelectedDeck().catch((error) => showToast(error.message, true)));
+    const changeDeck = (event) => loadSelectedDeck(event.target.value).catch((error) => {
+      renderHandSlots([], "Không tải được deck");
+      showToast(error.message, true);
+    });
+    $("#load-deck").addEventListener("click", () => changeDeck({ target: $("#deck-select") }));
+    $("#deck-select").addEventListener("change", changeDeck);
+    $("#deck_selector").addEventListener("change", changeDeck);
     $("#save-deck").addEventListener("click", saveDeck);
     $("#clear-deck").addEventListener("click", () => {
       state.main.clear(); state.extra.clear(); renderDeck(); showToast("Deck hiện tại đã được xóa.");
@@ -521,6 +545,13 @@
 
   async function init() {
     setupEvents();
+    await loadDeckIndex();
+    try {
+      await loadSelectedDeck($("#deck_selector").value, { showLoading: false });
+    } catch (error) {
+      renderHandSlots([], "Không tải được deck");
+      showToast(error.message, true);
+    }
     const health = await api("/api/health");
     $("#app-status").textContent = health.status === "ok" ? "ENGINE READY" : "CATALOG DEGRADED";
     $("#catalog-count").textContent = `${health.cards.toLocaleString()} cards`;
@@ -540,14 +571,20 @@
       $("#search-engine").textContent = "Local fuzzy fallback (Fuse CDN unavailable)";
     }
     renderResults("");
-    await loadDeckIndex();
-    await loadSelectedDeck();
     await checkVisionStatus();
   }
 
-  init().catch((error) => {
-    $("#app-status").textContent = "STARTUP ERROR";
-    $("#card-results").textContent = error.message;
-    showToast(error.message, true);
-  });
+  function boot() {
+    init().catch((error) => {
+      $("#app-status").textContent = "STARTUP ERROR";
+      $("#card-results").textContent = error.message;
+      showToast(error.message, true);
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot, { once: true });
+  } else {
+    boot();
+  }
 })();

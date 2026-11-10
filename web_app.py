@@ -58,6 +58,7 @@ TEMPLATES_DIR = ROOT / "templates"
 STATIC_DIR = ROOT / "static"
 DEFAULT_DECK_FILE = "vs_k9_deck.json"
 AI_ROUTE_ITERATIONS = 15000
+FRONTEND_VERSION = "hand-slots-fix-20261110"
 
 
 def _text(value: Any) -> str:
@@ -137,6 +138,23 @@ def _deck_summary(path: Path) -> dict[str, Any]:
         return {"file": path.name, "name": raw.get("name", path.stem), "main_count": main, "extra_count": extra}
     except (OSError, ValueError, TypeError, AttributeError):
         return {"file": path.name, "name": path.stem, "main_count": 0, "extra_count": 0}
+
+
+def _available_decks() -> list[dict[str, Any]]:
+    available = []
+    for path in sorted(EXAMPLES_DIR.glob("*.json")):
+        summary = _deck_summary(path)
+        if summary["main_count"] or summary["extra_count"]:
+            available.append(summary)
+    return available
+
+
+def _deck_main_names(deck_file: str) -> list[str]:
+    raw = json.loads(_safe_deck_file(deck_file).read_text(encoding="utf-8"))
+    return list(dict.fromkeys(
+        _text(entry.get("name")) for entry in raw.get("main_deck", [])
+        if isinstance(entry, dict) and _text(entry.get("name"))
+    ))
 
 
 def _banlist_limits() -> dict[str, int]:
@@ -464,10 +482,21 @@ async def dashboard(request: Request) -> HTMLResponse:
         catalog_error = str(exc)
     else:
         catalog_error = ""
+    deck_options = await run_in_threadpool(_available_decks)
+    initial_deck_file = deck_options[0]["file"] if deck_options else ""
+    initial_hand_cards = await run_in_threadpool(_deck_main_names, initial_deck_file) if initial_deck_file else []
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"request": request, "card_count": count, "catalog_error": catalog_error},
+        context={
+            "request": request,
+            "card_count": count,
+            "catalog_error": catalog_error,
+            "deck_options": deck_options,
+            "initial_deck_file": initial_deck_file,
+            "initial_hand_cards": initial_hand_cards,
+            "asset_version": FRONTEND_VERSION,
+        },
     )
 
 
@@ -495,12 +524,7 @@ async def cards() -> JSONResponse:
 
 @app.get("/api/decks")
 async def decks() -> dict[str, Any]:
-    available = []
-    for path in sorted(EXAMPLES_DIR.glob("*.json")):
-        summary = _deck_summary(path)
-        if summary["main_count"] or summary["extra_count"]:
-            available.append(summary)
-    return {"decks": available}
+    return {"decks": await run_in_threadpool(_available_decks)}
 
 
 @app.get("/api/decks/{deck_file}")

@@ -5,6 +5,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
 
@@ -50,12 +51,71 @@ class WebDashboardTests(unittest.TestCase):
         html = (root / "templates" / "index.html").read_text(encoding="utf-8")
         script = (root / "static" / "app.js").read_text(encoding="utf-8")
         self.assertIn('id="generate-ai-route"', html)
-        for slot in range(1, 6):
-            self.assertIn(f'id="hand-slot-{slot}"', html)
+        self.assertIn('id="deck_selector"', html)
+        self.assertIn('id="hand_slot_{{ slot }}"', html)
+        self.assertIn("range(1, 6)", html)
         self.assertIn('id="human-route-steps"', html)
         self.assertIn("/api/generate-route", script)
-        self.assertIn("Array.from(new Set(mainCards.map", script)
+        self.assertIn("[...new Set(mainCards.map", script)
+        self.assertIn('$("#deck_selector").addEventListener("change", changeDeck)', script)
+        self.assertIn("DOMContentLoaded", script)
         self.assertIn("Vui lòng nhập các bước đi để AI chấm điểm", script)
+
+    @unittest.skipIf(web_app is None, "Install requirements-web.txt for dashboard tests.")
+    def test_initial_dashboard_renders_unique_cards_in_all_five_hand_slots(self) -> None:
+        class SlotOptionParser(HTMLParser):
+            def __init__(self) -> None:
+                super().__init__()
+                self.active_slot = None
+                self.active_option = False
+                self.option_text = []
+                self.options: dict[str, list[str]] = {}
+
+            def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+                attributes = dict(attrs)
+                if tag == "select" and (attributes.get("id") or "").startswith("hand_slot_"):
+                    self.active_slot = attributes["id"]
+                    self.options[self.active_slot] = []
+                elif tag == "option" and self.active_slot:
+                    self.active_option = True
+                    self.option_text = []
+
+            def handle_data(self, data: str) -> None:
+                if self.active_option:
+                    self.option_text.append(data)
+
+            def handle_endtag(self, tag: str) -> None:
+                if tag == "option" and self.active_slot and self.active_option:
+                    self.options[self.active_slot].append("".join(self.option_text).strip())
+                    self.active_option = False
+                elif tag == "select" and self.active_slot:
+                    self.active_slot = None
+
+        deck_index = web_app._available_decks()
+        self.assertTrue(deck_index)
+        first_deck = deck_index[0]
+        raw = json.loads((web_app.EXAMPLES_DIR / first_deck["file"]).read_text(encoding="utf-8"))
+        initial_cards = web_app._deck_main_names(first_deck["file"])
+        rendered_html = web_app.templates.env.get_template("index.html").render(
+            request=None,
+            card_count=0,
+            catalog_error="",
+            deck_options=deck_index,
+            initial_deck_file=first_deck["file"],
+            initial_hand_cards=initial_cards,
+            asset_version=web_app.FRONTEND_VERSION,
+        )
+        self.assertIn('id="deck_selector"', rendered_html)
+        self.assertIn(f'value="{first_deck["file"]}" selected', rendered_html)
+
+        parser = SlotOptionParser()
+        parser.feed(rendered_html)
+        expected_names = list(dict.fromkeys(entry["name"] for entry in raw["main_deck"]))
+        for slot in range(1, 6):
+            self.assertEqual(
+                parser.options[f"hand_slot_{slot}"],
+                ["Chọn lá bài…", *expected_names],
+            )
 
     def test_database_cache_is_order_independent_and_preserves_gold_routes(self) -> None:
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as temp:
